@@ -81,6 +81,8 @@ DECLARE_GLOBAL_DATA_PTR;
 struct macb_dma_desc {
 	u32	addr;
 	u32	ctrl;
+	u32 addr_high;
+	u32 unused;
 };
 
 #define DMA_DESC_BYTES(n)	(n * sizeof(struct macb_dma_desc))
@@ -467,18 +469,18 @@ static void macb_phy_reset(struct macb_device *macb, const char *name)
 
 static int macb_phy_find(struct macb_device *macb, const char *name)
 {
-	int i;
+//	int i;
 	u16 phy_id;
 
 	/* Search for PHY... */
-	for (i = 0; i < 32; i++) {
-		macb->phy_addr = i;
+	//for (i = 0; i < 32; i++) {
+		macb->phy_addr = 9;
 		phy_id = macb_mdio_read(macb, macb->phy_addr, MII_PHYSID1);
 		if (phy_id != 0xffff) {
-			printf("%s: PHY present at %d\n", name, i);
+			printf("%s: PHY present at %d\n", name, macb->phy_addr);
 			return 0;
 		}
-	}
+	//}
 
 	/* PHY isn't up to snuff */
 	printf("%s: PHY not found\n", name);
@@ -732,9 +734,10 @@ static int gmac_init_multi_queues(struct macb_device *macb)
 	flush_dcache_range(macb->dummy_desc_dma, macb->dummy_desc_dma +
 			ALIGN(MACB_TX_DUMMY_DMA_DESC_SIZE, PKTALIGN));
 
-	for (i = 1; i < num_queues; i++)
+	for (i = 1; i < num_queues; i++) {
 		gem_writel_queue_TBQP(macb, macb->dummy_desc_dma, i - 1);
-
+		gem_writel_queue_RBQP(macb, macb->dummy_desc_dma, i - 1);
+	}
 	return 0;
 }
 
@@ -759,7 +762,8 @@ static void gmac_configure_dma(struct macb_device *macb)
 	else
 		dmacfg &= ~GEM_BIT(ENDIA_DESC);
 
-	dmacfg &= ~GEM_BIT(ADDR64);
+//	dmacfg &= ~GEM_BIT(ADDR64);
+	dmacfg |= GEM_BIT(ADDR64);
 	gem_writel(macb, DMACFG, dmacfg);
 }
 
@@ -788,6 +792,7 @@ static int _macb_init(struct macb_device *macb, const char *name)
 			paddr |= MACB_BIT(RX_WRAP);
 		macb->rx_ring[i].addr = paddr;
 		macb->rx_ring[i].ctrl = 0;
+		macb->rx_ring[i].addr_high = 0x0;
 		paddr += macb->rx_buffer_size;
 	}
 	macb_flush_ring_desc(macb, RX);
@@ -800,6 +805,7 @@ static int _macb_init(struct macb_device *macb, const char *name)
 				MACB_BIT(TX_WRAP);
 		else
 			macb->tx_ring[i].ctrl = MACB_BIT(TX_USED);
+		macb->tx_ring[i].addr_high = 0x0;
 	}
 	macb_flush_ring_desc(macb, TX);
 
@@ -1188,6 +1194,7 @@ static const struct eth_ops macb_eth_ops = {
 static int macb_enable_clk(struct udevice *dev)
 {
 	struct macb_device *macb = dev_get_priv(dev);
+#ifdef COMMENT_CLOCK_CODE
 	struct clk clk;
 	ulong clk_rate;
 	int ret;
@@ -1210,7 +1217,9 @@ static int macb_enable_clk(struct udevice *dev)
 		return -EINVAL;
 
 	macb->pclk_rate = clk_rate;
+#endif
 
+	macb->pclk_rate = PFSOC_GEM_CLK_FREQ;
 	return 0;
 }
 #endif
